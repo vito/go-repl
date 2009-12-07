@@ -28,7 +28,7 @@ var (
 	bin	= os.Getenv("GOBIN");
 	arch	= map[string]string{
 		"amd64": "6",
-		"i386": "8",
+		"386": "8",
 		"arm": "5",
 	}[os.Getenv("GOARCH")];
 )
