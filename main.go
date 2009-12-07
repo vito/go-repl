@@ -21,12 +21,15 @@ type World struct {
 	exec	string;
 }
 
+const TEMPPATH = "/tmp/gorepl"
+
+
 var (
-	bin		= os.Getenv("GOBIN");
+	bin	= os.Getenv("GOBIN");
 	arch	= map[string]string{
 		"amd64": "6",
 		"i386": "8",
-		"arm": "5"
+		"arm": "5",
 	}[os.Getenv("GOARCH")];
 )
 
@@ -72,7 +75,7 @@ func (self *World) source() string {
 }
 
 func compile(w *World) *bytes.Buffer {
-	ioutil.WriteFile("/tmp/gorepl.go", strings.Bytes(w.source()), 0644);
+	ioutil.WriteFile(TEMPPATH+".go", strings.Bytes(w.source()), 0644);
 
 	err := new(bytes.Buffer);
 
@@ -80,7 +83,7 @@ func compile(w *World) *bytes.Buffer {
 
 	os.ForkExec(
 		bin+"/"+arch+"g",
-		[]string{bin + "/" + arch + "g", "-o", "/tmp/gorepl.6", "/tmp/gorepl.go"},
+		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
 		os.Environ(),
 		"",
 		[]*os.File{nil, e, nil});
@@ -95,7 +98,7 @@ func compile(w *World) *bytes.Buffer {
 	re, e, _ = os.Pipe();
 	os.ForkExec(
 		bin+"/"+arch+"l",
-		[]string{bin + "/" + arch + "l", "-o", "/tmp/gorepl", "/tmp/gorepl.6"},
+		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
 		os.Environ(),
 		"",
 		[]*os.File{nil, e, nil});
@@ -113,8 +116,8 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 	re, e, _ := os.Pipe();
 	ro, o, _ := os.Pipe();
 	os.ForkExec(
-		"/tmp/gorepl",
-		[]string{"/tmp/gorepl"},
+		TEMPPATH,
+		[]string{TEMPPATH},
 		os.Environ(),
 		"",
 		[]*os.File{nil, o, e});
