@@ -16,10 +16,10 @@ import (
 )
 
 type World struct {
-	pkgs *vector.StringVector;
-	defs *vector.StringVector;
-	code *vector.Vector;
-	exec string;
+	pkgs	*vector.StringVector;
+	defs	*vector.StringVector;
+	code	*vector.Vector;
+	exec	string;
 }
 
 func getmap(m map[string]string, k string) (v string) {
@@ -31,24 +31,24 @@ func getmap(m map[string]string, k string) (v string) {
 }
 
 var (
-	envbin		= os.Getenv("GOBIN");
-	envarch		= os.Getenv("GOARCH");
-	archmap		= map[string]string{"amd64": "6", "i386": "8", "x86": "8", "arm": "5"};
-	arch		= getmap(archmap, envarch);
-	debug		= flag.Bool("d", false, "Debug mode");
+	envbin	= os.Getenv("GOBIN");
+	envarch	= os.Getenv("GOARCH");
+	archmap	= map[string]string{"amd64": "6", "i386": "8", "x86": "8", "arm": "5"};
+	arch	= getmap(archmap, envarch);
+	debug	= flag.Bool("d", false, "Debug mode");
 )
 
 func (self *World) source() string {
 	source := "package main\n";
 
 	for _, v := range self.pkgs.Data() {
-		source += "import \"" + v + "\"\n";
+		source += "import \"" + v + "\"\n"
 	}
 
 	source += "\n";
 
 	for _, d := range self.defs.Data() {
-		source += d + "\n\n";
+		source += d + "\n\n"
 	}
 
 	source += "func noop(_ interface{}) {}\n\n";
@@ -71,12 +71,12 @@ func (self *World) source() string {
 	}
 
 	if self.exec != "" {
-		source += "\t" + self.exec + ";\n";
+		source += "\t" + self.exec + ";\n"
 	}
 
 	source += "}\n";
 
-	return source
+	return source;
 }
 
 func compile(w *World) *bytes.Buffer {
@@ -87,12 +87,11 @@ func compile(w *World) *bytes.Buffer {
 	re, e, _ := os.Pipe();
 
 	os.ForkExec(
-		envbin + "/" + arch + "g",
+		envbin+"/"+arch+"g",
 		[]string{envbin + "/" + arch + "g", "-o", "/tmp/gorepl.6", "/tmp/gorepl.go"},
 		os.Environ(),
 		"",
-		[]*os.File{nil, e, nil}
-	);
+		[]*os.File{nil, e, nil});
 
 	e.Close();
 	io.Copy(err, re);
@@ -103,17 +102,16 @@ func compile(w *World) *bytes.Buffer {
 
 	re, e, _ = os.Pipe();
 	os.ForkExec(
-		envbin + "/" + arch + "l",
+		envbin+"/"+arch+"l",
 		[]string{envbin + "/" + arch + "l", "-o", "/tmp/gorepl", "/tmp/gorepl.6"},
 		os.Environ(),
 		"",
-		[]*os.File{nil, e, nil}
-	);
+		[]*os.File{nil, e, nil});
 
 	e.Close();
 	io.Copy(err, re);
 
-	return err
+	return err;
 }
 
 func run() (*bytes.Buffer, *bytes.Buffer) {
@@ -127,8 +125,7 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 		[]string{"/tmp/gorepl"},
 		os.Environ(),
 		"",
-		[]*os.File{nil, o, e}
-	);
+		[]*os.File{nil, o, e});
 
 	e.Close();
 	io.Copy(err, re);
@@ -140,7 +137,7 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 	o.Close();
 	io.Copy(out, ro);
 
-	return out, err
+	return out, err;
 }
 
 func main() {
@@ -156,7 +153,7 @@ func main() {
 	unstable := false;
 	for {
 		if unstable {
-			fmt.Print("! ");
+			fmt.Print("! ")
 		}
 
 		fmt.Print(strings.Join(w.pkgs.Data(), " ") + "> ");
@@ -179,25 +176,25 @@ func main() {
 			fmt.Println("\t!: inspect source");
 			continue;
 		case '+':
-			w.pkgs.Push(line[2:len(line) - 1]);
+			w.pkgs.Push(line[2 : len(line)-1]);
 			unstable = true;
 			continue;
 		case '-':
 			switch line[1] {
-				case 'd':
-					if w.defs.Len() > 0 {
-						w.defs.Pop();
-					}
-				case 'p':
-					if w.pkgs.Len() > 0 {
-						w.pkgs.Pop();
-					}
-				case 'c':
-					fallthrough;
-				default:
-					if w.code.Len() > 0 {
-						w.code.Pop();
-					}
+			case 'd':
+				if w.defs.Len() > 0 {
+					w.defs.Pop()
+				}
+			case 'p':
+				if w.pkgs.Len() > 0 {
+					w.pkgs.Pop()
+				}
+			case 'c':
+				fallthrough
+			default:
+				if w.code.Len() > 0 {
+					w.code.Pop()
+				}
 			}
 
 			if err := compile(w); err.Len() == 0 {
@@ -211,7 +208,7 @@ func main() {
 		case '\n':
 			continue
 		case ':':
-			tree, err := parser.ParseStmtList("go-repl", line[2:len(line) - 1]);
+			tree, err := parser.ParseStmtList("go-repl", line[2:len(line)-1]);
 			if err != nil {
 				fmt.Println("Parse error:", err);
 				continue;
@@ -219,12 +216,12 @@ func main() {
 
 			w.code.Push(tree[0]);
 		case '!':
-			fmt.Println(w.source());
+			fmt.Println(w.source())
 		default:
-			var tree interface{};
-			tree, err := parser.ParseStmtList("go-repl", line[0:len(line) - 1]);
+			var tree interface{}
+			tree, err := parser.ParseStmtList("go-repl", line[0:len(line)-1]);
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:len(line) - 1]);
+				tree, err = parser.ParseDeclList("go-repl", line[0:len(line)-1]);
 				if err != nil {
 					fmt.Println("Parse error:", err);
 					continue;
@@ -239,9 +236,9 @@ func main() {
 
 					switch v.(type) {
 					case *ast.AssignStmt:
-						w.code.Push(v);
+						w.code.Push(v)
 					default:
-						w.exec = str.String();
+						w.exec = str.String()
 					}
 				}
 			case []ast.Decl:
@@ -263,11 +260,10 @@ func main() {
 		}
 
 		if out, err := run(); err.Len() == 0 {
-			fmt.Print(out);
+			fmt.Print(out)
 		} else {
-			fmt.Println("Runtime error:\n", err);
+			fmt.Println("Runtime error:\n", err)
 		}
 
 	}
 }
-
