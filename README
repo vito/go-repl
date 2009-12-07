@@ -1,0 +1,54 @@
+A compiling Go REPL.
+
+Builds up Go source as the session goes on, compiles and runs it with every input.
+
+A "!" in front of the input means it's in "unstable" mode, e.g. a package has been imported and isn't used, or errors occur in the source.
+
+Example session:
+
+    Welcome to the Go REPL!
+    Enter '?' for a list of commands.
+    > ?
+    Commands:
+        ?: help
+        + (pkgname): import package
+        -[dpc]: pop last (declaration|package|code)
+        ~: reset
+        : (expr): add persistent code
+        !: inspect source
+    > println(1 + 2)
+    3
+    > a := 6
+    > b := 7
+    > println(a * b)
+    42
+    > + fmt
+    ! fmt> fmt.Println("Hello, world!")
+    Hello, world!
+    ! fmt> println("This won't work since fmt doesn't get used.")
+    ! fmt> : fmt.Print("")
+    fmt> println("Now it will!")
+    Now it will!
+    fmt> func b(a interface{}) { fmt.Printf("You passed: %#v\n", a); }                    
+    fmt> b(1)
+    ! fmt> !
+    package main
+    import "fmt"
+
+    func b(a interface{})	{ fmt.Printf("You passed: %#v\n", a) }
+
+    func noop(_ interface{}) {}
+
+    func main() {
+        a := 6;
+        noop(a);
+        b := 7;
+        noop(b);
+        fmt.Print("");
+    }
+
+    ! fmt> -d
+    fmt> func dump(a interface{}) { fmt.Printf("You passed: %#v\n", a); }
+    fmt> dump("Phew, there we go.")
+    You passed: "Phew, there we go."
+    fmt> 
