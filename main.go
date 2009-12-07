@@ -185,13 +185,19 @@ func main() {
 		case '-':
 			switch line[1] {
 				case 'd':
-					w.defs.Pop();
+					if w.defs.Len() > 0 {
+						w.defs.Pop();
+					}
 				case 'p':
-					w.pkgs.Pop();
+					if w.pkgs.Len() > 0 {
+						w.pkgs.Pop();
+					}
 				case 'c':
 					fallthrough;
 				default:
-					w.code.Pop();
+					if w.code.Len() > 0 {
+						w.code.Pop();
+					}
 			}
 
 			if err := compile(w); err.Len() == 0 {
@@ -250,6 +256,7 @@ func main() {
 
 		if err := compile(w); err.Len() > 0 {
 			unstable = true;
+			fmt.Println("Compile error:", err);
 			continue;
 		} else if line[0] == ':' {
 			unstable = false
@@ -258,7 +265,7 @@ func main() {
 		if out, err := run(); err.Len() == 0 {
 			fmt.Print(out);
 		} else {
-			fmt.Println(err);
+			fmt.Println("Runtime error:\n", err);
 		}
 
 	}

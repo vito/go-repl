@@ -31,6 +31,8 @@ Example session:
     Now it will!
     fmt> func b(a interface{}) { fmt.Printf("You passed: %#v\n", a); }                    
     fmt> b(1)
+    Compile error: /tmp/gorepl.go:12: cannot call non-function b (type int)
+    
     ! fmt> !
     package main
     import "fmt"
