@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio";
 	"bytes";
 	"container/vector";
 	"fmt";
@@ -11,6 +10,7 @@ import (
 	"io";
 	"io/ioutil";
 	"os";
+	"readline";
 	"strings";
 )
 
@@ -144,19 +144,22 @@ func main() {
 	w.defs = new(vector.StringVector);
 	w.code = new(vector.Vector);
 
-	r := bufio.NewReader(os.Stdin);
 	unstable := false;
 	for {
 		if unstable {
 			fmt.Print("! ")
 		}
 
-		fmt.Print(strings.Join(w.pkgs.Data(), " ") + "> ");
+		prompt := strings.Join(w.pkgs.Data(), " ") + "> ";
 
-		line, err := r.ReadString('\n');
-		if err != nil {
+		read := readline.ReadLine(&prompt);
+		if read == nil {
+			println();
 			break
 		}
+
+		line := *read;
+		readline.AddHistory(line);
 
 		w.exec = "";
 
@@ -171,7 +174,7 @@ func main() {
 			fmt.Println("\t!: inspect source");
 			continue;
 		case '+':
-			w.pkgs.Push(line[2 : len(line)-1]);
+			w.pkgs.Push(line[2:]);
 			unstable = true;
 			continue;
 		case '-':
@@ -184,7 +187,7 @@ func main() {
 				if w.pkgs.Len() > 0 {
 					if len(line) > 3 {
 						for i, v := range w.pkgs.Data() {
-							if v == line[3:len(line) - 1] {
+							if v == line[3:] {
 								w.pkgs.Delete(i);
 								break;
 							}
@@ -214,7 +217,7 @@ func main() {
 		case '\n':
 			continue
 		case ':':
-			tree, err := parser.ParseStmtList("go-repl", line[2:len(line)-1]);
+			tree, err := parser.ParseStmtList("go-repl", line[2:]);
 			if err != nil {
 				fmt.Println("Parse error:", err);
 				continue;
@@ -225,9 +228,9 @@ func main() {
 			fmt.Println(w.source())
 		default:
 			var tree interface{}
-			tree, err := parser.ParseStmtList("go-repl", line[0:len(line)-1]);
+			tree, err := parser.ParseStmtList("go-repl", line[0:]);
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:len(line)-1]);
+				tree, err = parser.ParseDeclList("go-repl", line[0:]);
 				if err != nil {
 					fmt.Println("Parse error:", err);
 					continue;
