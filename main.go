@@ -5,7 +5,6 @@ import (
 	"bytes";
 	"container/vector";
 	"fmt";
-	"flag";
 	"go/ast";
 	"go/parser";
 	"go/printer";
@@ -35,7 +34,6 @@ var (
 	envarch	= os.Getenv("GOARCH");
 	archmap	= map[string]string{"amd64": "6", "i386": "8", "x86": "8", "arm": "5"};
 	arch	= getmap(archmap, envarch);
-	debug	= flag.Bool("d", false, "Debug mode");
 )
 
 func (self *World) source() string {
