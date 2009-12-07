@@ -182,7 +182,16 @@ func main() {
 				}
 			case 'p':
 				if w.pkgs.Len() > 0 {
-					w.pkgs.Pop()
+					if len(line) > 3 {
+						for i, v := range w.pkgs.Data() {
+							if v == line[3:len(line) - 1] {
+								w.pkgs.Delete(i);
+								break;
+							}
+						}
+					} else {
+						w.pkgs.Pop()
+					}
 				}
 			case 'c':
 				fallthrough
@@ -195,6 +204,8 @@ func main() {
 			if err := compile(w); err.Len() == 0 {
 				unstable = false
 			}
+
+			continue
 		case '~':
 			w.pkgs.Resize(0, 0);
 			w.defs.Resize(0, 0);
