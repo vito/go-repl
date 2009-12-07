@@ -21,19 +21,13 @@ type World struct {
 	exec	string;
 }
 
-func getmap(m map[string]string, k string) (v string) {
-	v, ok := m[k];
-	if !ok {
-		v = ""
-	}
-	return;
-}
-
 var (
-	envbin	= os.Getenv("GOBIN");
-	envarch	= os.Getenv("GOARCH");
-	archmap	= map[string]string{"amd64": "6", "i386": "8", "x86": "8", "arm": "5"};
-	arch	= getmap(archmap, envarch);
+	bin		= os.Getenv("GOBIN");
+	arch	= map[string]string{
+		"amd64": "6",
+		"i386": "8",
+		"arm": "5"
+	}[os.Getenv("GOARCH")];
 )
 
 func (self *World) source() string {
@@ -85,8 +79,8 @@ func compile(w *World) *bytes.Buffer {
 	re, e, _ := os.Pipe();
 
 	os.ForkExec(
-		envbin+"/"+arch+"g",
-		[]string{envbin + "/" + arch + "g", "-o", "/tmp/gorepl.6", "/tmp/gorepl.go"},
+		bin+"/"+arch+"g",
+		[]string{bin + "/" + arch + "g", "-o", "/tmp/gorepl.6", "/tmp/gorepl.go"},
 		os.Environ(),
 		"",
 		[]*os.File{nil, e, nil});
@@ -100,8 +94,8 @@ func compile(w *World) *bytes.Buffer {
 
 	re, e, _ = os.Pipe();
 	os.ForkExec(
-		envbin+"/"+arch+"l",
-		[]string{envbin + "/" + arch + "l", "-o", "/tmp/gorepl", "/tmp/gorepl.6"},
+		bin+"/"+arch+"l",
+		[]string{bin + "/" + arch + "l", "-o", "/tmp/gorepl", "/tmp/gorepl.6"},
 		os.Environ(),
 		"",
 		[]*os.File{nil, e, nil});
