@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio";
 	"bytes";
 	"container/vector";
 	"fmt";
@@ -10,7 +11,6 @@ import (
 	"io";
 	"io/ioutil";
 	"os";
-	"readline";
 	"strings";
 )
 
@@ -144,22 +144,25 @@ func main() {
 	w.defs = new(vector.StringVector);
 	w.code = new(vector.Vector);
 
+	buf := bufio.NewReader(os.Stdin);
 	unstable := false;
 	for {
 		if unstable {
-			fmt.Print("! ")
+			fmt.Print("! ");
 		}
 
-		prompt := strings.Join(w.pkgs.Data(), " ") + "> ";
+		fmt.Print(strings.Join(w.pkgs.Data(), " ") + "> ");
 
-		read := readline.ReadLine(&prompt);
-		if read == nil {
+		read, err := buf.ReadString('\n');
+		if err != nil {
 			println();
 			break
 		}
 
-		line := *read;
-		readline.AddHistory(line);
+		line := read[0:len(read) - 1];
+		if len(line) == 0 {
+			continue
+		}
 
 		w.exec = "";
 
@@ -172,50 +175,48 @@ func main() {
 			fmt.Println("\t~: reset");
 			fmt.Println("\t: (expr): add persistent code");
 			fmt.Println("\t!: inspect source");
-			continue;
 		case '+':
 			w.pkgs.Push(line[2:]);
 			unstable = true;
-			continue;
 		case '-':
-			switch line[1] {
-			case 'd':
-				if w.defs.Len() > 0 {
-					w.defs.Pop()
-				}
-			case 'p':
-				if w.pkgs.Len() > 0 {
-					if len(line) > 3 {
-						for i, v := range w.pkgs.Data() {
-							if v == line[3:] {
-								w.pkgs.Delete(i);
-								break;
+			if len(line) > 1 {
+				switch line[1] {
+				case 'd':
+					if w.defs.Len() > 0 {
+						w.defs.Pop()
+					}
+				case 'p':
+					if w.pkgs.Len() > 0 {
+						if len(line) > 3 {
+							for i, v := range w.pkgs.Data() {
+								if v == line[3:] {
+									w.pkgs.Delete(i);
+									break;
+								}
 							}
+						} else {
+							w.pkgs.Pop()
 						}
-					} else {
-						w.pkgs.Pop()
+					}
+				case 'c':
+					if w.code.Len() > 0 {
+						w.code.Pop()
 					}
 				}
-			case 'c':
-				fallthrough
-			default:
+			} else {
 				if w.code.Len() > 0 {
 					w.code.Pop()
 				}
 			}
 
-			if err := compile(w); err.Len() == 0 {
-				unstable = false
-			}
-
-			continue
+			unstable = compile(w).Len() > 0;
 		case '~':
 			w.pkgs.Resize(0, 0);
 			w.defs.Resize(0, 0);
 			w.code.Resize(0, 0);
 			unstable = false;
-		case '\n':
-			continue
+		case '!':
+			fmt.Println(w.source())
 		case ':':
 			tree, err := parser.ParseStmtList("go-repl", line[2:]);
 			if err != nil {
@@ -224,8 +225,8 @@ func main() {
 			}
 
 			w.code.Push(tree[0]);
-		case '!':
-			fmt.Println(w.source())
+
+			unstable = compile(w).Len() > 0;
 		default:
 			var tree interface{}
 			tree, err := parser.ParseStmtList("go-repl", line[0:]);
@@ -258,21 +259,14 @@ func main() {
 					w.defs.Push(str.String());
 				}
 			}
-		}
 
-		if err := compile(w); err.Len() > 0 {
-			unstable = true;
-			fmt.Println("Compile error:", err);
-			continue;
-		} else if line[0] == ':' {
-			unstable = false
+			if err := compile(w); err.Len() > 0 {
+				fmt.Println("Compile error:", err);
+			} else if out, err := run(); err.Len() > 0 {
+				fmt.Println("Runtime error:\n", err)
+			} else {
+				fmt.Print(out)
+			}
 		}
-
-		if out, err := run(); err.Len() == 0 {
-			fmt.Print(out)
-		} else {
-			fmt.Println("Runtime error:\n", err)
-		}
-
 	}
 }
