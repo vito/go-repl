@@ -238,6 +238,7 @@ func main() {
 				}
 			}
 
+			changed := false;
 			switch tree.(type) {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
@@ -251,6 +252,8 @@ func main() {
 						w.exec = str.String()
 					}
 				}
+
+				changed = true
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
 					str := new(bytes.Buffer);
@@ -258,11 +261,21 @@ func main() {
 
 					w.defs.Push(str.String());
 				}
+
+				changed = true
 			}
 
 			if err := compile(w); err.Len() > 0 {
+				if changed {
+					unstable = true
+				}
+
 				fmt.Println("Compile error:", err);
 			} else if out, err := run(); err.Len() > 0 {
+				if changed {
+					unstable = true
+				}
+
 				fmt.Println("Runtime error:\n", err)
 			} else {
 				fmt.Print(out)
