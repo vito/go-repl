@@ -169,17 +169,18 @@ func main() {
 		switch line[0] {
 		case '?':
 			fmt.Println("Commands:");
-			fmt.Println("\t?: help");
-			fmt.Println("\t+ (pkgname): import package");
-			fmt.Println("\t-[dpc]: pop last (declaration|package|code)");
-			fmt.Println("\t~: reset");
-			fmt.Println("\t: (expr): add persistent code");
-			fmt.Println("\t!: inspect source");
+			fmt.Println("\t?\thelp");
+			fmt.Println("\t+ (pkg)\timport package");
+			fmt.Println("\t- (pkg)\tremove package");
+			fmt.Println("\t-[dpc]\tpop last (declaration|package|code)");
+			fmt.Println("\t~\treset");
+			fmt.Println("\t: (...)\tadd persistent code");
+			fmt.Println("\t!\tinspect source");
 		case '+':
 			w.pkgs.Push(line[2:]);
 			unstable = true;
 		case '-':
-			if len(line) > 1 {
+			if len(line) > 1 && line[1] != ' ' {
 				switch line[1] {
 				case 'd':
 					if w.defs.Len() > 0 {
@@ -187,16 +188,7 @@ func main() {
 					}
 				case 'p':
 					if w.pkgs.Len() > 0 {
-						if len(line) > 3 {
-							for i, v := range w.pkgs.Data() {
-								if v == line[3:] {
-									w.pkgs.Delete(i);
-									break;
-								}
-							}
-						} else {
-							w.pkgs.Pop()
-						}
+						w.pkgs.Pop()
 					}
 				case 'c':
 					if w.code.Len() > 0 {
@@ -204,8 +196,17 @@ func main() {
 					}
 				}
 			} else {
-				if w.code.Len() > 0 {
-					w.code.Pop()
+				if len(line) > 2 && w.pkgs.Len() > 0 {
+					for i, v := range w.pkgs.Data() {
+						if v == line[2:] {
+							w.pkgs.Delete(i);
+							break;
+						}
+					}
+				} else {
+					if w.code.Len() > 0 {
+						w.code.Pop()
+					}
 				}
 			}
 
