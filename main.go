@@ -148,7 +148,7 @@ func main() {
 	unstable := false;
 	for {
 		if unstable {
-			fmt.Print("! ");
+			fmt.Print("! ")
 		}
 
 		fmt.Print(strings.Join(w.pkgs.Data(), " ") + "> ");
@@ -156,10 +156,10 @@ func main() {
 		read, err := buf.ReadString('\n');
 		if err != nil {
 			println();
-			break
+			break;
 		}
 
-		line := read[0:len(read) - 1];
+		line := read[0 : len(read)-1];
 		if len(line) == 0 {
 			continue
 		}
@@ -262,21 +262,21 @@ func main() {
 					w.defs.Push(str.String());
 				}
 
-				changed = true
+				changed = true;
 			}
 
 			if err := compile(w); err.Len() > 0 {
-				if changed {
-					unstable = true
-				}
-
 				fmt.Println("Compile error:", err);
-			} else if out, err := run(); err.Len() > 0 {
+
 				if changed {
 					unstable = true
 				}
+			} else if out, err := run(); err.Len() > 0 {
+				fmt.Println("Runtime error:\n", err);
 
-				fmt.Println("Runtime error:\n", err)
+				if changed {
+					unstable = true
+				}
 			} else {
 				fmt.Print(out)
 			}
