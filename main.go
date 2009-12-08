@@ -248,13 +248,12 @@ func main() {
 
 					switch v.(type) {
 					case *ast.AssignStmt:
-						w.code.Push(v)
+						w.code.Push(v);
+						changed = true;
 					default:
 						w.exec = str.String()
 					}
 				}
-
-				changed = true
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
 					str := new(bytes.Buffer);

@@ -10,14 +10,13 @@ Example session:
     Enter '?' for a list of commands.
     > ?
     Commands:
-        ?: help
-        + (pkgname): import package
-        -[dpc]: pop last (declaration|package|code)
-        ~: reset
-        : (expr): add persistent code
-        !: inspect source
-    > println(1 + 2)
-    3
+        ?	help
+        + (pkg)	import package
+        - (pkg)	remove package
+        -[dpc]	pop last (declaration|package|code)
+        ~	reset
+        : (...)	add persistent code
+        !	inspect source
     > a := 6
     > b := 7
     > println(a * b)
@@ -26,14 +25,16 @@ Example session:
     ! fmt> fmt.Println("Hello, world!")
     Hello, world!
     ! fmt> println("This won't work since fmt doesn't get used.")
-    ! fmt> : fmt.Print("")
+    Compile error: /tmp/gorepl.go:2: imported and not used: fmt
+
+    ! fmt> : fmt.Print()
     fmt> println("Now it will!")
     Now it will!
-    fmt> func b(a interface{}) { fmt.Printf("You passed: %#v\n", a); }                    
+    fmt> func b(a interface{}) { fmt.Printf("You passed: %#v\n", a); }
     fmt> b(1)
-    Compile error: /tmp/gorepl.go:12: cannot call non-function b (type int)
-    
-    ! fmt> !
+    Compile error: /tmp/gorepl.go:14: cannot call non-function b (type int)
+
+    fmt> !
     package main
     import "fmt"
 
@@ -46,11 +47,35 @@ Example session:
         noop(a);
         b := 7;
         noop(b);
-        fmt.Print("");
+        fmt.Print();
     }
 
-    ! fmt> -d
+    fmt> -d
+    fmt> !
+    package main
+    import "fmt"
+
+    func noop(_ interface{}) {}
+
+    func main() {
+        a := 6;
+        noop(a);
+        b := 7;
+        noop(b);
+        fmt.Print();
+    }
+
     fmt> func dump(a interface{}) { fmt.Printf("You passed: %#v\n", a); }
     fmt> dump("Phew, there we go.")
     You passed: "Phew, there we go."
-    fmt> 
+    fmt> -d
+    fmt> -c
+    ! fmt> - fmt
+    > + math
+    ! math> println(math.Pi)
+    +3.141593e+000
+    ! math> + fmt
+    ! math fmt> fmt.Println(math.Pi)
+    3.1415927
+    ! math fmt> 
+
