@@ -79,3 +79,4 @@ Example session:
     3.1415927
     ! math fmt> 
 
+TODO: Write automatic test with the above example session as input and expected output.
