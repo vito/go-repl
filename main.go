@@ -36,13 +36,13 @@ var (
 func (self *World) source() string {
 	source := "package main\n"
 
-	for _, v := range self.pkgs.Data() {
+	for _, v := range *self.pkgs {
 		source += "import \"" + v + "\"\n"
 	}
 
 	source += "\n"
 
-	for _, d := range self.defs.Data() {
+	for _, d := range *self.defs {
 		source += d + "\n\n"
 	}
 
@@ -50,7 +50,7 @@ func (self *World) source() string {
 
 	source += "func main() {\n"
 
-	for _, c := range self.code.Data() {
+	for _, c := range *self.code {
 		str := new(bytes.Buffer)
 		printer.Fprint(str, c)
 
@@ -151,7 +151,7 @@ func main() {
 			fmt.Print("! ")
 		}
 
-		fmt.Print(strings.Join(w.pkgs.Data(), " ") + "> ")
+		fmt.Print(strings.Join(*w.pkgs, " ") + "> ")
 
 		read, err := buf.ReadString('\n')
 		if err != nil {
@@ -177,7 +177,7 @@ func main() {
 			fmt.Println("\t: (...)\tadd persistent code")
 			fmt.Println("\t!\tinspect source")
 		case '+':
-			w.pkgs.Push(line[2:])
+			w.pkgs.Push(strings.Trim(line[1:]," "))
 			unstable = true
 		case '-':
 			if len(line) > 1 && line[1] != ' ' {
@@ -197,7 +197,7 @@ func main() {
 				}
 			} else {
 				if len(line) > 2 && w.pkgs.Len() > 0 {
-					for i, v := range w.pkgs.Data() {
+					for i, v := range *w.pkgs {
 						if v == line[2:] {
 							w.pkgs.Delete(i)
 							break
@@ -219,7 +219,8 @@ func main() {
 		case '!':
 			fmt.Println(w.source())
 		case ':':
-			tree, err := parser.ParseStmtList("go-repl", line[2:], nil)
+			line = line + ";"
+			tree, err := parser.ParseStmtList("go-repl", strings.Trim(line[1:]," "))
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
@@ -229,10 +230,11 @@ func main() {
 
 			unstable = compile(w).Len() > 0
 		default:
+			line = line + ";"
 			var tree interface{}
-			tree, err := parser.ParseStmtList("go-repl", line[0:], nil)
+			tree, err := parser.ParseStmtList("go-repl", line[0:])
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:], nil)
+				tree, err = parser.ParseDeclList("go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
