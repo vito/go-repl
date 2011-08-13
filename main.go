@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+    "go/token"
 )
 
 type World struct {
@@ -31,7 +32,7 @@ var (
 		"386":   "8",
 		"arm":   "5",
 	}[os.Getenv("GOARCH")]
-)
+)//get env variable
 
 func (self *World) source() string {
 	source := "package main\n"
@@ -44,23 +45,23 @@ func (self *World) source() string {
 
 	for _, d := range *self.defs {
 		source += d + "\n\n"
-	}
+	} //define
 
 	source += "func noop(_ interface{}) {}\n\n"
 
 	source += "func main() {\n"
 
 	for _, c := range *self.code {
-		str := new(bytes.Buffer)
-		printer.Fprint(str, c)
+		str := new(token.FileSet)
+		printer.Fprint(os.Stdout, str, c)
 
 		source += "\t" + str.String() + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
 			for _, name := range c.(*ast.AssignStmt).Lhs {
-				str := new(bytes.Buffer)
-				printer.Fprint(str, name)
-				source += "\t" + "noop(" + str.String() + ");\n"
+				str := new(token.FileSet)
+				printer.Fprint(os.Stdout, str, name)
+				source += "\t" + "noop(" + string(str) + ");\n"
 			}
 		}
 	}
@@ -81,12 +82,16 @@ func compile(w *World) *bytes.Buffer {
 
 	re, e, _ := os.Pipe()
 
-	os.ForkExec(
-		bin+"/"+arch+"g",
-		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
+	attr := &os.ProcAttr{Env: os.Environ(), Files: []*os.File{nil, e, nil}}
+    args := []string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"}
+    os.StartProcess(bin+"/"+arch+"g", args, attr)
+//
+//	 os.StartProcess(
+//		bin+"/"+arch+"g",
+//		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
+//		os.Environ(),
+//		"",
+//		[]*os.File{nil, e, nil})
 
 	e.Close()
 	io.Copy(err, re)
@@ -96,12 +101,15 @@ func compile(w *World) *bytes.Buffer {
 	}
 
 	re, e, _ = os.Pipe()
-	os.ForkExec(
-		bin+"/"+arch+"l",
-		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
+
+    args := []string{bin + "/" + arch + "l", "-o", TEMPPATH + ".6", TEMPPATH + ".go"}
+    os.StartProcess(bin+"/"+arch+"l", args, attr)
+//	 os.StartProcess(
+//		bin+"/"+arch+"l",
+//		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
+//		os.Environ(),
+//		"",
+//		[]*os.File{nil, e, nil})
 
 	e.Close()
 	io.Copy(err, re)
@@ -115,13 +123,17 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 
 	re, e, _ := os.Pipe()
 	ro, o, _ := os.Pipe()
-	os.ForkExec(
-		TEMPPATH,
-		[]string{TEMPPATH},
-		os.Environ(),
-		"",
-		[]*os.File{nil, o, e})
 
+	attr := &os.ProcAttr{Env: os.Environ(), Files: []*os.File{nil, o, e}}
+    args := []string{TEMPPATH}
+    os.StartProcess(TEMPPATH, args, attr)
+//	 os.StartProcess(
+//		TEMPPATH,
+//		[]string{TEMPPATH},
+//		os.Environ(),
+//		"",
+//		[]*os.File{nil, o, e})
+//
 	e.Close()
 	io.Copy(err, re)
 
@@ -259,7 +271,7 @@ func main() {
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
 					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+					printer.Fprint(os.Stdout,str, v)
 
 					w.defs.Push(str.String())
 				}
