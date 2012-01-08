@@ -1,12 +1,13 @@
 package main
 
 import (
+	"os/exec"
 	"bufio"
 	"bytes"
-	"container/vector"
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/token"
 	"go/printer"
 	"io"
 	"io/ioutil"
@@ -15,9 +16,10 @@ import (
 )
 
 type World struct {
-	pkgs *vector.StringVector
-	defs *vector.StringVector
-	code *vector.Vector
+	pkgs *[]string
+	defs *[]string
+	code *[]interface{}
+	files *token.FileSet	
 	exec string
 }
 
@@ -52,14 +54,14 @@ func (self *World) source() string {
 
 	for _, c := range *self.code {
 		str := new(bytes.Buffer)
-		printer.Fprint(str, c)
+		printer.Fprint(str, self.files, c)
 
 		source += "\t" + str.String() + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
 			for _, name := range c.(*ast.AssignStmt).Lhs {
 				str := new(bytes.Buffer)
-				printer.Fprint(str, name)
+				printer.Fprint(str, self.files, name)
 				source += "\t" + "noop(" + str.String() + ");\n"
 			}
 		}
@@ -77,62 +79,65 @@ func (self *World) source() string {
 func compile(w *World) *bytes.Buffer {
 	ioutil.WriteFile(TEMPPATH+".go", []byte(w.source()), 0644)
 
-	err := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
 
-	re, e, _ := os.Pipe()
-
-	os.ForkExec(
-		bin+"/"+arch+"g",
-		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
-
-	e.Close()
-	io.Copy(err, re)
-
-	if err.Len() > 0 {
-		return err
+	cmd := exec.Command(bin+"/"+arch+"g",
+		"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	cmdout,err := cmd.StdoutPipe()
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, cmdout)
+	err = cmd.Wait()
+	if errBuf.Len() > 0 {
+		return errBuf
 	}
 
-	re, e, _ = os.Pipe()
-	os.ForkExec(
-		bin+"/"+arch+"l",
-		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
 
-	e.Close()
-	io.Copy(err, re)
+	cmd = exec.Command(bin+"/"+arch+"l",
+		"-o", TEMPPATH, TEMPPATH + "."+arch)
+	cmdout,err = cmd.StdoutPipe()
 
-	return err
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, cmdout)
+	err = cmd.Wait()
+
+	return errBuf
 }
 
 func run() (*bytes.Buffer, *bytes.Buffer) {
-	out := new(bytes.Buffer)
-	err := new(bytes.Buffer)
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
 
-	re, e, _ := os.Pipe()
-	ro, o, _ := os.Pipe()
-	os.ForkExec(
-		TEMPPATH,
-		[]string{TEMPPATH},
-		os.Environ(),
-		"",
-		[]*os.File{nil, o, e})
+	cmd := exec.Command(
+		TEMPPATH,TEMPPATH)
 
-	e.Close()
-	io.Copy(err, re)
-
-	if err.Len() > 0 {
-		return nil, err
+	stdout,err := cmd.StdoutPipe()
+	if err != nil {
+		panic(err)
 	}
 
-	o.Close()
-	io.Copy(out, ro)
+	stderr,err := cmd.StderrPipe()
+	if err != nil {
+		panic(err)
+	}
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, stderr)
 
-	return out, err
+	if errBuf.Len() > 0 {
+		return nil, errBuf
+	}
+
+	io.Copy(outBuf, stdout)
+
+	return outBuf, errBuf
 }
 
 func main() {
@@ -140,9 +145,10 @@ func main() {
 	fmt.Println("Enter '?' for a list of commands.")
 
 	w := new(World)
-	w.pkgs = new(vector.StringVector)
-	w.defs = new(vector.StringVector)
-	w.code = new(vector.Vector)
+	w.pkgs = &[]string{}
+	w.code = &[]interface{}{}
+	w.defs = &[]string{}
+	w.files = token.NewFileSet()
 
 	buf := bufio.NewReader(os.Stdin)
 	unstable := false
@@ -177,64 +183,65 @@ func main() {
 			fmt.Println("\t: (...)\tadd persistent code")
 			fmt.Println("\t!\tinspect source")
 		case '+':
-			w.pkgs.Push(strings.Trim(line[1:]," "))
+			*w.pkgs = append(*w.pkgs,strings.Trim(line[1:]," "))
 			unstable = true
 		case '-':
 			if len(line) > 1 && line[1] != ' ' {
 				switch line[1] {
 				case 'd':
-					if w.defs.Len() > 0 {
-						w.defs.Pop()
+					if len(*w.defs) > 0 {
+						*w.defs = (*w.defs)[:len(*w.defs)-1]
 					}
 				case 'p':
-					if w.pkgs.Len() > 0 {
-						w.pkgs.Pop()
+					if len(*w.pkgs) > 0 {
+						*w.pkgs = (*w.pkgs)[:len(*w.pkgs)-1]
 					}
 				case 'c':
-					if w.code.Len() > 0 {
-						w.code.Pop()
+					if len(*w.code) > 0 {
+						*w.code = (*w.code)[:len(*w.code)-1]
 					}
 				}
 			} else {
-				if len(line) > 2 && w.pkgs.Len() > 0 {
+				if len(line) > 2 && len(*w.pkgs) > 0 {
 					for i, v := range *w.pkgs {
 						if v == line[2:] {
-							w.pkgs.Delete(i)
+							copy((*w.pkgs)[i:], (*w.pkgs)[i+1:])
+							*w.pkgs = (*w.pkgs)[:len(*w.pkgs)-1]
 							break
 						}
 					}
 				} else {
-					if w.code.Len() > 0 {
-						w.code.Pop()
+					if len(*w.code) > 0 {
+						*w.code = (*w.code)[:len(*w.code)-1]
 					}
 				}
 			}
 
 			unstable = compile(w).Len() > 0
 		case '~':
-			w.pkgs.Resize(0, 0)
-			w.defs.Resize(0, 0)
-			w.code.Resize(0, 0)
+			*w.pkgs = (*w.pkgs)[:0]
+			*w.defs = (*w.pkgs)[:0]
+			*w.code = (*w.code)[:0]
 			unstable = false
 		case '!':
 			fmt.Println(w.source())
 		case ':':
 			line = line + ";"
-			tree, err := parser.ParseStmtList("go-repl", strings.Trim(line[1:]," "))
+			tree, err := parser.ParseStmtList(w.files, "go-repl", strings.Trim(line[1:]," "))
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
 			}
 
-			w.code.Push(tree[0])
+			*w.code = append(*w.code,tree[0])
 
 			unstable = compile(w).Len() > 0
 		default:
 			line = line + ";"
 			var tree interface{}
-			tree, err := parser.ParseStmtList("go-repl", line[0:])
+			tree, err := parser.ParseStmtList(w.files, "go-repl", line[0:])
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:])
+				tree, err = parser.ParseDeclList(w.files, "go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
@@ -246,11 +253,11 @@ func main() {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
 					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+					printer.Fprint(str, w.files, v)
 
 					switch v.(type) {
 					case *ast.AssignStmt:
-						w.code.Push(v)
+						*w.code = append(*w.code,v)
 						changed = true
 					default:
 						w.exec = str.String()
@@ -259,9 +266,9 @@ func main() {
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
 					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+					printer.Fprint(str, w.files, v)
 
-					w.defs.Push(str.String())
+					*w.defs = append(*w.defs,str.String())
 				}
 
 				changed = true
