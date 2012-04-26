@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+    "go/token"
 )
 
 type World struct {
@@ -51,16 +52,17 @@ func (self *World) source() string {
 	source += "func main() {\n"
 
 	for _, c := range *self.code {
-		str := new(bytes.Buffer)
-		printer.Fprint(str, c)
-
+        fset := token.NewFileSet()
+        var str bytes.Buffer
+        printer.Fprint(&str, fset, c)
 		source += "\t" + str.String() + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
-			for _, name := range c.(*ast.AssignStmt).Lhs {
-				str := new(bytes.Buffer)
-				printer.Fprint(str, name)
-				source += "\t" + "noop(" + str.String() + ");\n"
+		for _, name := range c.(*ast.AssignStmt).Lhs {
+            fset := token.NewFileSet()
+            var str bytes.Buffer
+            printer.Fprint(&str, fset, name)
+			source += "\t" + "noop(" + str.String() + ");\n"
 			}
 		}
 	}
@@ -81,12 +83,9 @@ func compile(w *World) *bytes.Buffer {
 
 	re, e, _ := os.Pipe()
 
-	os.ForkExec(
-		bin+"/"+arch+"g",
-		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
+	attr := &os.ProcAttr{Env: os.Environ(), Files: []*os.File{nil, e, nil}}
+    args := []string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"}
+    os.StartProcess(bin+"/"+arch+"g", args, attr)
 
 	e.Close()
 	io.Copy(err, re)
@@ -96,12 +95,10 @@ func compile(w *World) *bytes.Buffer {
 	}
 
 	re, e, _ = os.Pipe()
-	os.ForkExec(
-		bin+"/"+arch+"l",
-		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
+
+    attr = &os.ProcAttr{Env: os.Environ(), Files: []*os.File{nil, e, nil}}
+    args = []string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"}
+    os.StartProcess(bin+"/"+arch+"l", args, attr)
 
 	e.Close()
 	io.Copy(err, re)
@@ -115,12 +112,10 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 
 	re, e, _ := os.Pipe()
 	ro, o, _ := os.Pipe()
-	os.ForkExec(
-		TEMPPATH,
-		[]string{TEMPPATH},
-		os.Environ(),
-		"",
-		[]*os.File{nil, o, e})
+
+	attr := &os.ProcAttr{Env: os.Environ(), Files: []*os.File{nil, o, e}}
+    args := []string{TEMPPATH}
+    os.StartProcess(TEMPPATH, args, attr)
 
 	e.Close()
 	io.Copy(err, re)
@@ -159,7 +154,7 @@ func main() {
 			break
 		}
 
-		line := read[0 : len(read)-1]
+        line := read[0 : len(read)-1]
 		if len(line) == 0 {
 			continue
 		}
@@ -172,7 +167,7 @@ func main() {
 			fmt.Println("\t?\thelp")
 			fmt.Println("\t+ (pkg)\timport package")
 			fmt.Println("\t- (pkg)\tremove package")
-			fmt.Println("\t-[dpc]\tpop last (declaration|package|code)")
+			fmt.Println("\t- [dpc]\tpop last (declaration|package|code)")
 			fmt.Println("\t~\treset")
 			fmt.Println("\t: (...)\tadd persistent code")
 			fmt.Println("\t!\tinspect source")
@@ -220,7 +215,8 @@ func main() {
 			fmt.Println(w.source())
 		case ':':
 			line = line + ";"
-			tree, err := parser.ParseStmtList("go-repl", strings.Trim(line[1:]," "))
+            fset := token.NewFileSet()
+			tree, err := parser.ParseStmtList(fset, "go-repl", strings.Trim(line[1:]," "))
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
@@ -232,9 +228,11 @@ func main() {
 		default:
 			line = line + ";"
 			var tree interface{}
-			tree, err := parser.ParseStmtList("go-repl", line[0:])
+            fset := token.NewFileSet()
+			tree, err := parser.ParseStmtList(fset, "go-repl", line[0:])
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:])
+                fset := token.NewFileSet()
+				tree, err = parser.ParseDeclList(fset, "go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
@@ -245,8 +243,9 @@ func main() {
 			switch tree.(type) {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
-					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+                    fset := token.NewFileSet()
+                    var str bytes.Buffer
+                    printer.Fprint(&str, fset, v)
 
 					switch v.(type) {
 					case *ast.AssignStmt:
@@ -258,9 +257,9 @@ func main() {
 				}
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
-					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
-
+                    fset := token.NewFileSet()
+                    var str bytes.Buffer
+                    printer.Fprint(&str, fset, v)
 					w.defs.Push(str.String())
 				}
 
@@ -274,11 +273,12 @@ func main() {
 					unstable = true
 				}
 			} else if out, err := run(); err.Len() > 0 {
-				fmt.Println("Runtime error:\n", err)
-
+//uncomment #BUG and comment #ADD for see a bug.
+//				fmt.Println("Runtime error:\n", err) //#BUG
 				if changed {
 					unstable = true
 				}
+                fmt.Print(err) //#ADD
 			} else {
 				fmt.Print(out)
 			}
