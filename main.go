@@ -314,13 +314,17 @@ func main() {
 		default:
 			line = line + ";"
 			var tree interface{}
-			tree, err := ParseStmtList(w.files, "go-repl", line[0:])
+			tree, err := ParseDeclList(w.files, "go-repl", line[0:])
 			if err != nil {
-				tree, err = ParseDeclList(w.files, "go-repl", line[0:])
+				tree, err = ParseStmtList(w.files, "go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
+				} else {
+					fmt.Println("CODE: ", line[0:])
 				}
+			} else {
+				fmt.Println("DECL: ", line[0:])
 			}
 
 			changed := false
@@ -354,6 +358,8 @@ func main() {
 				}
 
 				changed = true
+			default:
+				fmt.Println("Fatal error: Unknown tree type.")
 			}
 
 			if err := compile(w); err.Len() > 0 {
