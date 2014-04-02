@@ -338,7 +338,7 @@ func main() {
 			w.unstable = compile(w).Len() > 0
 		case '~':
 			*w.pkgs = (*w.pkgs)[:0]
-			*w.defs = (*w.pkgs)[:0]
+			*w.defs = (*w.defs)[:0]
 			*w.code = (*w.code)[:0]
 			w.unstable = false
 			w.write_src_mode = false
