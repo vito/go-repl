@@ -22,6 +22,8 @@ type World struct {
 	code *[]interface{}
 	files *token.FileSet	
 	exec string
+	unstable bool
+	write_src_mode bool
 }
 
 const TEMPPATH = "/tmp/gorepl"
@@ -218,7 +220,7 @@ func exec_special(w *World, line string) bool {
 		*w.defs = append(*w.defs, "var __Pi = math.Pi")
 		*w.defs = append(*w.defs, "var __Trim_Nil = strings.Trim(\" \", \" \")")
 		*w.defs = append(*w.defs, "var __Num_Itoa = strconv.Itoa(5)")
-		//unstable = compile(w).Len() > 0
+		w.unstable = compile(w).Len() > 0
 		return true
 	}
 	if line == "run" {  // For running without a command
@@ -231,6 +233,14 @@ func exec_special(w *World, line string) bool {
 		}
 		return true
 	}
+	if line == "write" {  // For writing to source only
+                w.write_src_mode = true
+                return true
+        }
+        if line == "repl" {  // For running in repl mode (by default)
+                w.write_src_mode = false
+                return true
+        }
 	return false
 }
 
@@ -243,11 +253,12 @@ func main() {
 	w.code = &[]interface{}{}
 	w.defs = &[]string{}
 	w.files = token.NewFileSet()
+	w.unstable := false
+	w.write_src_mode = false
 
 	buf := bufio.NewReader(os.Stdin)
-	unstable := false
 	for {
-		if unstable {
+		if w.unstable {
 			fmt.Print("! ")
 		}
 
@@ -267,9 +278,6 @@ func main() {
 			line = strings.Replace(line, "import", "+", 1)
 		}
 		if exec_special(w, line) {
-			if line == "auto" {
-				unstable = compile(w).Len() > 0
-			}
 			continue
 		}
 
@@ -294,7 +302,7 @@ func main() {
 					fmt.Println(" ", len(*w.pkgs), pkg_name)
 				}
 			}
-			unstable = compile(w).Len() > 0
+			w.unstable = compile(w).Len() > 0
 		case '-':
 			if len(line) > 1 && line[1] != ' ' {
 				switch line[1] {
@@ -327,12 +335,13 @@ func main() {
 				}
 			}
 
-			unstable = compile(w).Len() > 0
+			w.unstable = compile(w).Len() > 0
 		case '~':
 			*w.pkgs = (*w.pkgs)[:0]
 			*w.defs = (*w.pkgs)[:0]
 			*w.code = (*w.code)[:0]
-			unstable = false
+			w.unstable = false
+			w.write_src_mode = false
 		case '!':
 			fmt.Println(w.source_print(true))
 		case ':':
@@ -345,7 +354,7 @@ func main() {
 
 			*w.code = append(*w.code,tree[0])
 
-			unstable = compile(w).Len() > 0
+			w.unstable = compile(w).Len() > 0
 		default:
 			line = line + ";"
 			var tree interface{}
@@ -373,6 +382,10 @@ func main() {
 			switch tree.(type) {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
+					if w.write_src_mode {
+						*w.code = append(*w.code, v)
+						continue
+					}
 					str := new(bytes.Buffer)
 					printer.Fprint(str, w.files, v)
 
@@ -397,6 +410,8 @@ func main() {
 				fmt.Println("Fatal error: Unknown tree type.")
 			}
 
+			if w.write_src_mode { continue }
+
 			if err := compile(w); err.Len() > 0 {
 				fmt.Println("Compile error:", err)
 				got_err = true
@@ -417,12 +432,12 @@ func main() {
 			}
 
 			if changed && got_err {
-				unstable = true
+				w.unstable = true
 				fmt.Println("Fatal error: Code should not run")
 			}
 
 			if changed {
-				unstable = compile(w).Len() > 0
+				w.unstable = compile(w).Len() > 0
 			}
 		}
 	}
