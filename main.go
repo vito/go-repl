@@ -253,7 +253,7 @@ func main() {
 	w.code = &[]interface{}{}
 	w.defs = &[]string{}
 	w.files = token.NewFileSet()
-	w.unstable := false
+	w.unstable = false
 	w.write_src_mode = false
 
 	buf := bufio.NewReader(os.Stdin)
