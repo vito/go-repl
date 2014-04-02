@@ -36,26 +36,48 @@ var (
 )
 
 func (self *World) source() string {
+	return self.source_print(false)
+}
+
+func (self *World) source_print(print_linenums bool) string {
 	source := "package main\n"
 
+	pkgs_num := 0
+	defs_num := 0
+	code_num := 0
+	if print_linenums { source = "\n    " + source }
+
 	for _, v := range *self.pkgs {
+		if print_linenums {
+			source += "p"+strconv.Itoa(pkgs_num)+": "
+			pkgs_num += 1
+		}
 		source += "import \"" + v + "\"\n"
 	}
 
 	source += "\n"
 
 	for _, d := range *self.defs {
+		if print_linenums {
+			source += "d"+strconv.Itoa(defs_num)+": "
+			defs_num += 1
+		}
 		source += d + "\n\n"
 	}
 
+	if print_linenums { source += "    " }
 	source += "func noop(_ interface{}) {}\n\n"
-
+	if print_linenums { source += "    " }
 	source += "func main() {\n"
 
 	for _, c := range *self.code {
 		str := new(bytes.Buffer)
 		printer.Fprint(str, self.files, c)
 
+		if print_linenums {
+			source += "c"+strconv.Itoa(code_num)+": "
+			code_num += 1
+		}
 		source += "\t" + str.String() + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
@@ -71,6 +93,7 @@ func (self *World) source() string {
 		source += "\t" + self.exec + ";\n"
 	}
 
+	if print_linenums { source += "    " }
 	source += "}\n"
 
 	return source
@@ -271,7 +294,7 @@ func main() {
 			*w.code = (*w.code)[:0]
 			unstable = false
 		case '!':
-			fmt.Println(w.source())
+			fmt.Println(w.source_print(true))
 		case ':':
 			line = line + ";"
 			tree, err := ParseStmtList(w.files, "go-repl", strings.Trim(line[1:]," "))
