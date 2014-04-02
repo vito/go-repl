@@ -352,7 +352,9 @@ func main() {
 				continue
 			}
 
-			*w.code = append(*w.code,tree[0])
+			for _, v := range tree {
+				*w.code = append(*w.code, v)
+			}
 
 			w.unstable = compile(w).Len() > 0
 		default:
