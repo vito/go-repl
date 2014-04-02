@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"bufio"
 	"bytes"
@@ -140,7 +141,7 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 	return outBuf, errBuf
 }
 
-func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast.Stmt, os.Error) {
+func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast.Stmt, error) {
 	f, err := parser.ParseFile(fset, filename, src, 0)
 	if err != nil {
 		return nil, err
@@ -148,7 +149,7 @@ func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast
 	return f.Decls[0].(*ast.FuncDecl).Body.List, nil
 }
 
-func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast.Decl, os.Error) {
+func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast.Decl, error) {
 	f, err := parser.ParseFile(fset, filename, src, 0)
 	if err != nil {
 		return nil, err
