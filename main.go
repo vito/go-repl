@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os/exec"
 	"bufio"
 	"bytes"
