@@ -35,6 +35,10 @@ var (
 	}[os.Getenv("GOARCH")]
 )
 
+func indentCode(text string, indent string) string {
+	return strings.Join(strings.Split(text, "\n"), "\n"+indent)
+}
+
 func (self *World) source() string {
 	return self.source_print(false)
 }
@@ -62,7 +66,7 @@ func (self *World) source_print(print_linenums bool) string {
 			source += "d"+strconv.Itoa(defs_num)+": "
 			defs_num += 1
 		}
-		source += d + "\n\n"
+		source += indentCode(d, "    ") + "\n\n"
 	}
 
 	if print_linenums { source += "    " }
@@ -78,7 +82,7 @@ func (self *World) source_print(print_linenums bool) string {
 			source += "c"+strconv.Itoa(code_num)+": "
 			code_num += 1
 		}
-		source += "\t" + str.String() + ";\n"
+		source += "\t" + indentCode(str.String(), "\t") + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
 			for _, name := range c.(*ast.AssignStmt).Lhs {
