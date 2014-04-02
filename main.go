@@ -208,6 +208,32 @@ func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast
 	return f.Decls, nil
 }
 
+func exec_special(w *World, line string) bool {
+	if line == "auto" {  // For autostarting
+		*w.pkgs = append(*w.pkgs, "fmt")
+		*w.pkgs = append(*w.pkgs, "math")
+		*w.pkgs = append(*w.pkgs, "strings")
+		*w.pkgs = append(*w.pkgs, "strconv")
+		*w.defs = append(*w.defs, "var __Print_n, __Print_err = fmt.Print(\"\")")
+		*w.defs = append(*w.defs, "var __Pi = math.Pi")
+		*w.defs = append(*w.defs, "var __Trim_Nil = strings.Trim(\" \", \" \")")
+		*w.defs = append(*w.defs, "var __Num_Itoa = strconv.Itoa(5)")
+		//unstable = compile(w).Len() > 0
+		return true
+	}
+	if line == "run" {  // For running without a command
+		if err := compile(w); err.Len() > 0 {
+			fmt.Println("Compile error:", err)
+		} else if out, err := run(); err.Len() > 0 {
+			fmt.Println("Runtime error:\n", err)
+		} else {
+			fmt.Print(out)
+		}
+		return true
+	}
+	return false
+}
+
 func main() {
 	fmt.Println("Welcome to the Go REPL!")
 	fmt.Println("Enter '?' for a list of commands.")
@@ -233,8 +259,17 @@ func main() {
 			break
 		}
 
-		line := read[0 : len(read)-1]
+		line := strings.Trim(read[0 : len(read)-1], " ")
 		if len(line) == 0 {
+			continue
+		}
+		if strings.HasPrefix(line, "import") {
+			line = strings.Replace(line, "import", "+", 1)
+		}
+		if exec_special(w, line) {
+			if line == "auto" {
+				unstable = compile(w).Len() > 0
+			}
 			continue
 		}
 
