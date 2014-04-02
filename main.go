@@ -289,6 +289,13 @@ func main() {
 			}
 
 			changed := false
+			got_err := false
+			bkup_pkgs := *w.pkgs
+			bkup_code := *w.code
+			bkup_defs := *w.defs
+			bkup_files := w.files
+			bkup_exec := w.exec
+
 			switch tree.(type) {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
@@ -316,18 +323,30 @@ func main() {
 
 			if err := compile(w); err.Len() > 0 {
 				fmt.Println("Compile error:", err)
-
-				if changed {
-					unstable = true
-				}
+				got_err = true
 			} else if out, err := run(); err.Len() > 0 {
 				fmt.Println("Runtime error:\n", err)
-
-				if changed {
-					unstable = true
-				}
+				got_err = true
 			} else {
 				fmt.Print(out)
+			}
+			
+			if got_err {
+				*w.pkgs = bkup_pkgs
+				*w.code = bkup_code
+				*w.defs = bkup_defs
+				w.files = bkup_files
+				w.exec = bkup_exec
+				continue
+			}
+
+			if changed && got_err {
+				unstable = true
+				fmt.Println("Fatal error: Code should not run")
+			}
+
+			if changed {
+				unstable = compile(w).Len() > 0
 			}
 		}
 	}
