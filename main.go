@@ -81,8 +81,18 @@ func compile(w *World) *bytes.Buffer {
 
 	errBuf := new(bytes.Buffer)
 
-	cmd := exec.Command(bin+"/"+arch+"g",
-		"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	if arch == "" {
+		arch = "6"   // Most likely 64-bit architecture
+	}
+	cmd := exec.Command("echo", "")
+
+	if bin != "" {
+		cmd = exec.Command(bin+"/"+arch+"g",
+			"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	} else {
+		cmd = exec.Command("go", "tool", arch+"g",
+			"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	}
 	cmdout,err := cmd.StdoutPipe()
 	err = cmd.Start()
 	if err != nil {
@@ -94,9 +104,13 @@ func compile(w *World) *bytes.Buffer {
 		return errBuf
 	}
 
-
-	cmd = exec.Command(bin+"/"+arch+"l",
-		"-o", TEMPPATH, TEMPPATH + "."+arch)
+	if bin != "" {
+		cmd = exec.Command(bin+"/"+arch+"l",
+			"-o", TEMPPATH, TEMPPATH + "."+arch)
+	} else {
+		cmd = exec.Command("go", "tool", arch+"l",
+			"-o", TEMPPATH, TEMPPATH + "."+arch)
+	}
 	cmdout,err = cmd.StdoutPipe()
 
 	err = cmd.Start()
@@ -140,8 +154,17 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 	return outBuf, errBuf
 }
 
+func intf2str(src interface{}) string {
+	switch s := src.(type) {
+		case string:
+			return s
+	}
+	return ""
+}
+
 func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast.Stmt, error) {
-	f, err := parser.ParseFile(fset, filename, src, 0)
+	//f, err := parser.ParseFile(fset, filename, src, 0)
+	f, err := parser.ParseFile(fset, filename, "package p;func _(){"+intf2str(src)+"\n}", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +172,8 @@ func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast
 }
 
 func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast.Decl, error) {
-	f, err := parser.ParseFile(fset, filename, src, 0)
+	//f, err := parser.ParseFile(fset, filename, src, 0)
+	f, err := parser.ParseFile(fset, filename, "package p;"+intf2str(src), 0)
 	if err != nil {
 		return nil, err
 	}
