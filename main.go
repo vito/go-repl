@@ -140,6 +140,22 @@ func run() (*bytes.Buffer, *bytes.Buffer) {
 	return outBuf, errBuf
 }
 
+func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast.Stmt, os.Error) {
+	f, err := parser.ParseFile(fset, filename, src, 0)
+	if err != nil {
+		return nil, err
+	}
+	return f.Decls[0].(*ast.FuncDecl).Body.List, nil
+}
+
+func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast.Decl, os.Error) {
+	f, err := parser.ParseFile(fset, filename, src, 0)
+	if err != nil {
+		return nil, err
+	}
+	return f.Decls, nil
+}
+
 func main() {
 	fmt.Println("Welcome to the Go REPL!")
 	fmt.Println("Enter '?' for a list of commands.")
@@ -227,7 +243,7 @@ func main() {
 			fmt.Println(w.source())
 		case ':':
 			line = line + ";"
-			tree, err := parser.ParseStmtList(w.files, "go-repl", strings.Trim(line[1:]," "))
+			tree, err := ParseStmtList(w.files, "go-repl", strings.Trim(line[1:]," "))
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
@@ -239,9 +255,9 @@ func main() {
 		default:
 			line = line + ";"
 			var tree interface{}
-			tree, err := parser.ParseStmtList(w.files, "go-repl", line[0:])
+			tree, err := ParseStmtList(w.files, "go-repl", line[0:])
 			if err != nil {
-				tree, err = parser.ParseDeclList(w.files, "go-repl", line[0:])
+				tree, err = ParseDeclList(w.files, "go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
