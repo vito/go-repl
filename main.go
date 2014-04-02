@@ -223,8 +223,15 @@ func main() {
 			fmt.Println("\t: (...)\tadd persistent code")
 			fmt.Println("\t!\tinspect source")
 		case '+':
-			*w.pkgs = append(*w.pkgs,strings.Trim(line[1:]," "))
-			unstable = true
+			allpkgs := strings.Split(strings.Trim(line[1:]," "), " ")
+			fmt.Println("Importing: ")
+			for _, pkg_name := range allpkgs {
+				if pkg_name != "" {
+					*w.pkgs = append(*w.pkgs, pkg_name)
+					fmt.Println(" ", len(*w.pkgs), pkg_name)
+				}
+			}
+			unstable = compile(w).Len() > 0
 		case '-':
 			if len(line) > 1 && line[1] != ' ' {
 				switch line[1] {
