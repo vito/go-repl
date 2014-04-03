@@ -435,6 +435,12 @@ func main() {
 		if strings.HasPrefix(line, "import") {
 			line = strings.Replace(line, "import", "+", 1)
 		}
+		if line == "help" {
+			line = "?"
+		}
+		if line == "source" {
+			line = "!"
+		}
 		if exec_special(w, line) {
 			continue
 		}
@@ -444,19 +450,24 @@ func main() {
 
 		switch line[0] {
 		case '?':
-			fmt.Println("Commands:")
-			fmt.Println("\t?\thelp")
-			fmt.Println("\timport (pkg) (pkg) ...\timport package")
+			fmt.Println("Symbol Commands:")
+			fmt.Println("\t?                \thelp menu")
 			fmt.Println("\t+ (pkg) (pkg) ...\timport package")
 			fmt.Println("\t- (pkg) (pkg) ...\tremove package")
 			fmt.Println("\t-[dpc][#],[#],...\tpop last/specific (declaration|package|code)")
-			fmt.Println("\t~\treset")
-			fmt.Println("\t: (...)\tadd persistent code")
-			fmt.Println("\t!\tinspect source")
-			fmt.Println("\trun\trun source")
-			fmt.Println("\twrite\twrite source mode on")
-			fmt.Println("\trepl\twrite source mode off")
-			fmt.Println("\tauto\tautosetup with some standard packages")
+			fmt.Println("\t~                \treset")
+			fmt.Println("\t: (...)          \tadd persistent code")
+			fmt.Println("\t!                \tinspect source")
+			
+			fmt.Println("Word Commands:")
+			fmt.Println("\thelp                  \thelp menu")
+			fmt.Println("\timport (pkg) (pkg) ...\timport package")
+			fmt.Println("\tsource                \tinspect source")
+			fmt.Println("\trun                   \trun source")
+			fmt.Println("\twrite                 \twrite source mode on")
+			fmt.Println("\trepl                  \twrite source mode off")
+			fmt.Println("\tauto                  \tautosetup with some standard packages")
+			
 			fmt.Println("For removal, -[dpc] is equivalent to -[dpc]<last index>")
 		case '+':
 			allpkgs := strings.Split(cmd_args, " ")
