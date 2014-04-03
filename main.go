@@ -211,7 +211,7 @@ func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast
 }
 
 func exec_special(w *World, line string) bool {
-	if line == "auto" {  // For autostarting
+	if line == "auto" {  // For autosetup
 		*w.pkgs = append(*w.pkgs, "fmt")
 		*w.pkgs = append(*w.pkgs, "math")
 		*w.pkgs = append(*w.pkgs, "strings")
@@ -220,6 +220,8 @@ func exec_special(w *World, line string) bool {
 		*w.defs = append(*w.defs, "var __Pi = math.Pi")
 		*w.defs = append(*w.defs, "var __Trim_Nil = strings.Trim(\" \", \" \")")
 		*w.defs = append(*w.defs, "var __Num_Itoa = strconv.Itoa(5)")
+		*w.defs = append(*w.defs, "var print = fmt.Println")
+		*w.defs = append(*w.defs, "var printf = fmt.Printf")
 		w.unstable = compile(w).Len() > 0
 		return true
 	}
@@ -453,7 +455,7 @@ func main() {
 			fmt.Println("\trun\trun source")
 			fmt.Println("\twrite\twrite source mode on")
 			fmt.Println("\trepl\twrite source mode off")
-			fmt.Println("\tauto\tautomatically import standard package")
+			fmt.Println("\tauto\tautosetup with some standard packages")
 			fmt.Println("For removal, -[dpc] is equivalent to -[dpc]<last index>")
 		case '+':
 			allpkgs := strings.Split(strings.Trim(line[1:]," "), " ")
