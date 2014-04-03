@@ -244,6 +244,162 @@ func exec_special(w *World, line string) bool {
 	return false
 }
 
+
+
+
+
+
+// Code Removal
+func cmd_remove_by_index(w *World, cmd_args string) {
+	if len(cmd_args) == 0 {
+		fmt.Println("Fatal error: cmd_args is empty")
+		return
+	}
+
+	item_type := cmd_args[0]
+	item_list_len := map[uint8]int{
+		'd': len(*w.defs)+1,
+		'p': len(*w.pkgs)+1,
+		'c': len(*w.code)+1,
+	}[item_type] - 1
+	item_name := map[uint8]string {
+		'd': "declarations",
+		'p': "packages",
+		'c': "code",
+	}[item_type]
+
+	if item_list_len == -1 {
+		fmt.Printf("Remove: Invalid item type '%c'\n", item_type)
+		return
+	}
+	if item_list_len == 0 {
+		fmt.Printf("Remove: no more %s to remove\n", item_name)
+		return
+	}
+	items_to_remove := cmd_remove_get_item_indices(item_list_len, cmd_args)
+
+	switch item_type {
+	case 'd':
+		cmd_remove_declarations_by_index(w, items_to_remove)
+	case 'p':
+		cmd_remove_packages_by_index(w, items_to_remove)
+	case 'c':
+		cmd_remove_code_by_index(w, items_to_remove)
+	default:
+		fmt.Printf("Fatal error: Invalid item type '%c'\n", item_type)
+		return
+	}
+}
+
+func cmd_remove_get_item_indices(item_list_len int, cmd_args string) []bool {
+	items_to_remove := make([]bool, item_list_len)
+
+	if len(cmd_args) == 1 {
+		items_to_remove[item_list_len - 1] = true
+		return items_to_remove
+	}
+
+	item_indices := strings.Split(cmd_args[1:], ",")
+
+	for _, item_index_str := range item_indices {
+		if item_index_str == "" { continue }
+		item_index, err := strconv.Atoi(item_index_str)
+		if err != nil {
+			fmt.Printf("Remove: %s not integer\n", item_index_str)
+			continue
+		}
+		if item_index < 0 || item_index >= item_list_len {
+			fmt.Printf("Remove: %d out of range\n", item_index)
+			continue
+		}
+		if items_to_remove[item_index] {
+			fmt.Printf("Remove: %d already in list\n", item_index)
+			continue
+		}
+		items_to_remove[item_index] = true
+	}
+
+	return items_to_remove
+}
+
+// The unfortunate fact is that these three functions could not be merged, as
+// the w.code type is different from the other two (and is necessary, since
+// there is a need to keep track of if it is an assignment or not).
+// Since Go is a static type language (and the interface{} type cannot be
+// used here as intended), these three are left on their own. The rest has
+// already been abstracted above, thankfully.
+func cmd_remove_declarations_by_index(w *World, defs_to_remove []bool) {
+	new_index := 0
+	for old_index, def_item := range *w.defs {
+		if defs_to_remove[old_index] {
+			continue
+		}
+		(*w.defs)[new_index] = def_item
+		new_index += 1
+	}
+	*w.defs = (*w.defs)[:new_index]
+}
+
+func cmd_remove_packages_by_index(w *World, pkgs_to_remove []bool) {
+	new_index := 0
+	for old_index, pkg_item := range *w.pkgs {
+		if pkgs_to_remove[old_index] {
+			continue
+		}
+		(*w.pkgs)[new_index] = pkg_item
+		new_index += 1
+	}
+	*w.pkgs = (*w.pkgs)[:new_index]
+}
+
+func cmd_remove_code_by_index(w *World, code_to_remove []bool) {
+	new_index := 0
+	for old_index, code_item := range *w.code {
+		if code_to_remove[old_index] {
+			continue
+		}
+		(*w.code)[new_index] = code_item
+		new_index += 1
+	}
+	*w.code = (*w.code)[:new_index]
+}
+
+func cmd_remove_packages_by_name(w *World, cmd_args string) {
+	if len(cmd_args) == 0 {
+		fmt.Println("Fatal error: cmd_args is empty")
+		return
+	}
+
+	pkg_index_list := []string{}
+	for _, pkg_name := range strings.Split(cmd_args, " ") {
+		if pkg_name == "" { continue }
+		pkg_index := -1
+		for i, v := range *w.pkgs {
+			if v == pkg_name {
+				pkg_index = i
+				break
+			}
+		}
+		if pkg_index == -1 {
+			fmt.Printf("Remove: No such package '%s'\n", pkg_name)
+			continue
+		}
+		fmt.Printf("Remove: Removing '%s' at %d\n",pkg_name, pkg_index)
+		pkg_index_list = append(pkg_index_list,strconv.Itoa(pkg_index))
+	}
+	cmd_remove_by_index(w, "p"+strings.Join(pkg_index_list, ","))
+}
+
+
+
+
+
+
+
+
+
+
+
 func main() {
 	fmt.Println("Welcome to the Go REPL!")
 	fmt.Println("Enter '?' for a list of commands.")
@@ -287,12 +443,18 @@ func main() {
 		case '?':
 			fmt.Println("Commands:")
 			fmt.Println("\t?\thelp")
-			fmt.Println("\t+ (pkg)\timport package")
-			fmt.Println("\t- (pkg)\tremove package")
-			fmt.Println("\t-[dpc]\tpop last (declaration|package|code)")
+			fmt.Println("\timport (pkg) (pkg) ...\timport package")
+			fmt.Println("\t+ (pkg) (pkg) ...\timport package")
+			fmt.Println("\t- (pkg) (pkg) ...\tremove package")
+			fmt.Println("\t-[dpc][#],[#],...\tpop last/specific (declaration|package|code)")
 			fmt.Println("\t~\treset")
 			fmt.Println("\t: (...)\tadd persistent code")
 			fmt.Println("\t!\tinspect source")
+			fmt.Println("\trun\trun source")
+			fmt.Println("\twrite\twrite source mode on")
+			fmt.Println("\trepl\twrite source mode off")
+			fmt.Println("\tauto\tautomatically import standard package")
+			fmt.Println("For removal, -[dpc] is equivalent to -[dpc]<last index>")
 		case '+':
 			allpkgs := strings.Split(strings.Trim(line[1:]," "), " ")
 			fmt.Println("Importing: ")
@@ -304,37 +466,13 @@ func main() {
 			}
 			w.unstable = compile(w).Len() > 0
 		case '-':
-			if len(line) > 1 && line[1] != ' ' {
-				switch line[1] {
-				case 'd':
-					if len(*w.defs) > 0 {
-						*w.defs = (*w.defs)[:len(*w.defs)-1]
-					}
-				case 'p':
-					if len(*w.pkgs) > 0 {
-						*w.pkgs = (*w.pkgs)[:len(*w.pkgs)-1]
-					}
-				case 'c':
-					if len(*w.code) > 0 {
-						*w.code = (*w.code)[:len(*w.code)-1]
-					}
-				}
+			if len(cmd_args) == 0 {
+				fmt.Println("No item specified for removal.")
+			} else if line[1] != ' ' {
+				cmd_remove_by_index(w, cmd_args)
 			} else {
-				if len(line) > 2 && len(*w.pkgs) > 0 {
-					for i, v := range *w.pkgs {
-						if v == line[2:] {
-							copy((*w.pkgs)[i:], (*w.pkgs)[i+1:])
-							*w.pkgs = (*w.pkgs)[:len(*w.pkgs)-1]
-							break
-						}
-					}
-				} else {
-					if len(*w.code) > 0 {
-						*w.code = (*w.code)[:len(*w.code)-1]
-					}
-				}
+				cmd_remove_packages_by_name(w, cmd_args)
 			}
-
 			w.unstable = compile(w).Len() > 0
 		case '~':
 			*w.pkgs = (*w.pkgs)[:0]
