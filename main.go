@@ -1,24 +1,29 @@
 package main
 
 import (
+	"os/exec"
 	"bufio"
 	"bytes"
-	"container/vector"
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/token"
 	"go/printer"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
+	"strconv"
 )
 
 type World struct {
-	pkgs *vector.StringVector
-	defs *vector.StringVector
-	code *vector.Vector
+	pkgs *[]string
+	defs *[]string
+	code *[]interface{}
+	files *token.FileSet	
 	exec string
+	unstable bool
+	write_src_mode bool
 }
 
 const TEMPPATH = "/tmp/gorepl"
@@ -33,33 +38,59 @@ var (
 	}[os.Getenv("GOARCH")]
 )
 
+func indentCode(text string, indent string) string {
+	return strings.Join(strings.Split(text, "\n"), "\n"+indent)
+}
+
 func (self *World) source() string {
+	return self.source_print(false)
+}
+
+func (self *World) source_print(print_linenums bool) string {
 	source := "package main\n"
 
+	pkgs_num := 0
+	defs_num := 0
+	code_num := 0
+	if print_linenums { source = "\n    " + source }
+
 	for _, v := range *self.pkgs {
+		if print_linenums {
+			source += "p"+strconv.Itoa(pkgs_num)+": "
+			pkgs_num += 1
+		}
 		source += "import \"" + v + "\"\n"
 	}
 
 	source += "\n"
 
 	for _, d := range *self.defs {
-		source += d + "\n\n"
+		if print_linenums {
+			source += "d"+strconv.Itoa(defs_num)+": "
+			defs_num += 1
+		}
+		source += indentCode(d, "    ") + "\n\n"
 	}
 
+	if print_linenums { source += "    " }
 	source += "func noop(_ interface{}) {}\n\n"
-
+	if print_linenums { source += "    " }
 	source += "func main() {\n"
 
 	for _, c := range *self.code {
 		str := new(bytes.Buffer)
-		printer.Fprint(str, c)
+		printer.Fprint(str, self.files, c)
 
-		source += "\t" + str.String() + ";\n"
+		if print_linenums {
+			source += "c"+strconv.Itoa(code_num)+": "
+			code_num += 1
+		}
+		source += "\t" + indentCode(str.String(), "\t") + ";\n"
 		switch c.(type) {
 		case *ast.AssignStmt:
 			for _, name := range c.(*ast.AssignStmt).Lhs {
 				str := new(bytes.Buffer)
-				printer.Fprint(str, name)
+				printer.Fprint(str, self.files, name)
 				source += "\t" + "noop(" + str.String() + ");\n"
 			}
 		}
@@ -69,6 +100,7 @@ func (self *World) source() string {
 		source += "\t" + self.exec + ";\n"
 	}
 
+	if print_linenums { source += "    " }
 	source += "}\n"
 
 	return source
@@ -77,77 +109,327 @@ func (self *World) source() string {
 func compile(w *World) *bytes.Buffer {
 	ioutil.WriteFile(TEMPPATH+".go", []byte(w.source()), 0644)
 
-	err := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
 
-	re, e, _ := os.Pipe()
+	if arch == "" {
+		arch = "6"   // Most likely 64-bit architecture
+	}
+	cmd := exec.Command("echo", "")
 
-	os.ForkExec(
-		bin+"/"+arch+"g",
-		[]string{bin + "/" + arch + "g", "-o", TEMPPATH + ".6", TEMPPATH + ".go"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
-
-	e.Close()
-	io.Copy(err, re)
-
-	if err.Len() > 0 {
-		return err
+	if bin != "" {
+		cmd = exec.Command(bin+"/"+arch+"g",
+			"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	} else {
+		cmd = exec.Command("go", "tool", arch+"g",
+			"-o", TEMPPATH + "."+arch, TEMPPATH + ".go")
+	}
+	cmdout,err := cmd.StdoutPipe()
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, cmdout)
+	err = cmd.Wait()
+	if errBuf.Len() > 0 {
+		return errBuf
 	}
 
-	re, e, _ = os.Pipe()
-	os.ForkExec(
-		bin+"/"+arch+"l",
-		[]string{bin + "/" + arch + "l", "-o", TEMPPATH + "", TEMPPATH + ".6"},
-		os.Environ(),
-		"",
-		[]*os.File{nil, e, nil})
+	if bin != "" {
+		cmd = exec.Command(bin+"/"+arch+"l",
+			"-o", TEMPPATH, TEMPPATH + "."+arch)
+	} else {
+		cmd = exec.Command("go", "tool", arch+"l",
+			"-o", TEMPPATH, TEMPPATH + "."+arch)
+	}
+	cmdout,err = cmd.StdoutPipe()
 
-	e.Close()
-	io.Copy(err, re)
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, cmdout)
+	err = cmd.Wait()
 
-	return err
+	return errBuf
 }
 
 func run() (*bytes.Buffer, *bytes.Buffer) {
-	out := new(bytes.Buffer)
-	err := new(bytes.Buffer)
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
 
-	re, e, _ := os.Pipe()
-	ro, o, _ := os.Pipe()
-	os.ForkExec(
-		TEMPPATH,
-		[]string{TEMPPATH},
-		os.Environ(),
-		"",
-		[]*os.File{nil, o, e})
+	cmd := exec.Command(
+		TEMPPATH,TEMPPATH)
 
-	e.Close()
-	io.Copy(err, re)
-
-	if err.Len() > 0 {
-		return nil, err
+	stdout,err := cmd.StdoutPipe()
+	if err != nil {
+		panic(err)
 	}
 
-	o.Close()
-	io.Copy(out, ro)
+	stderr,err := cmd.StderrPipe()
+	if err != nil {
+		panic(err)
+	}
+	err = cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(errBuf, stderr)
 
-	return out, err
+	if errBuf.Len() > 0 {
+		return nil, errBuf
+	}
+
+	io.Copy(outBuf, stdout)
+
+	return outBuf, errBuf
 }
+
+func intf2str(src interface{}) string {
+	switch s := src.(type) {
+		case string:
+			return s
+	}
+	return ""
+}
+
+func ParseStmtList(fset *token.FileSet, filename string, src interface{}) ([]ast.Stmt, error) {
+	//f, err := parser.ParseFile(fset, filename, src, 0)
+	f, err := parser.ParseFile(fset, filename, "package p;func _(){"+intf2str(src)+"\n}", 0)
+	if err != nil {
+		return nil, err
+	}
+	return f.Decls[0].(*ast.FuncDecl).Body.List, nil
+}
+
+func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast.Decl, error) {
+	//f, err := parser.ParseFile(fset, filename, src, 0)
+	f, err := parser.ParseFile(fset, filename, "package p;"+intf2str(src), 0)
+	if err != nil {
+		return nil, err
+	}
+	return f.Decls, nil
+}
+
+func exec_check_alias(line string) string {
+	if line == "help" {
+		return "?"
+	} else if strings.HasPrefix(line, "import") {
+		return strings.Replace(line, "import", "+", 1)
+	} else if line == "reset" {
+		return "~"
+	} else if line == "source" {
+		return "!"
+	}
+	return line
+}
+
+func exec_special(w *World, line string) bool {
+	if line == "auto" {  // For autosetup
+		*w.pkgs = append(*w.pkgs, "fmt")
+		*w.pkgs = append(*w.pkgs, "math")
+		*w.pkgs = append(*w.pkgs, "strings")
+		*w.pkgs = append(*w.pkgs, "strconv")
+		*w.defs = append(*w.defs, "var __Print_n, __Print_err = fmt.Print(\"\")")
+		*w.defs = append(*w.defs, "var __Pi = math.Pi")
+		*w.defs = append(*w.defs, "var __Trim_Nil = strings.Trim(\" \", \" \")")
+		*w.defs = append(*w.defs, "var __Num_Itoa = strconv.Itoa(5)")
+		*w.defs = append(*w.defs, "var print = fmt.Println")
+		*w.defs = append(*w.defs, "var printf = fmt.Printf")
+		w.unstable = compile(w).Len() > 0
+		return true
+	}
+	if line == "run" {  // For running without a command
+		if err := compile(w); err.Len() > 0 {
+			fmt.Println("Compile error:", err)
+		} else if out, err := run(); err.Len() > 0 {
+			fmt.Println("Runtime error:\n", err)
+		} else {
+			fmt.Print(out)
+		}
+		return true
+	}
+	if line == "write" {  // For writing to source only
+                w.write_src_mode = true
+                return true
+        }
+        if line == "repl" {  // For running in repl mode (by default)
+                w.write_src_mode = false
+                return true
+        }
+	return false
+}
+
+
+
+
+
+
+// Code Removal
+func cmd_remove_by_index(w *World, cmd_args string) {
+	if len(cmd_args) == 0 {
+		fmt.Println("Fatal error: cmd_args is empty")
+		return
+	}
+
+	item_type := cmd_args[0]
+	item_list_len := map[uint8]int{
+		'd': len(*w.defs)+1,
+		'p': len(*w.pkgs)+1,
+		'c': len(*w.code)+1,
+	}[item_type] - 1
+	item_name := map[uint8]string {
+		'd': "declarations",
+		'p': "packages",
+		'c': "code",
+	}[item_type]
+
+	if item_list_len == -1 {
+		fmt.Printf("Remove: Invalid item type '%c'\n", item_type)
+		return
+	}
+	if item_list_len == 0 {
+		fmt.Printf("Remove: no more %s to remove\n", item_name)
+		return
+	}
+	items_to_remove := cmd_remove_get_item_indices(item_list_len, cmd_args)
+
+	switch item_type {
+	case 'd':
+		cmd_remove_declarations_by_index(w, items_to_remove)
+	case 'p':
+		cmd_remove_packages_by_index(w, items_to_remove)
+	case 'c':
+		cmd_remove_code_by_index(w, items_to_remove)
+	default:
+		fmt.Printf("Fatal error: Invalid item type '%c'\n", item_type)
+		return
+	}
+}
+
+func cmd_remove_get_item_indices(item_list_len int, cmd_args string) []bool {
+	items_to_remove := make([]bool, item_list_len)
+
+	if len(cmd_args) == 1 {
+		items_to_remove[item_list_len - 1] = true
+		return items_to_remove
+	}
+
+	item_indices := strings.Split(cmd_args[1:], ",")
+
+	for _, item_index_str := range item_indices {
+		if item_index_str == "" { continue }
+		item_index, err := strconv.Atoi(item_index_str)
+		if err != nil {
+			fmt.Printf("Remove: %s not integer\n", item_index_str)
+			continue
+		}
+		if item_index < 0 || item_index >= item_list_len {
+			fmt.Printf("Remove: %d out of range\n", item_index)
+			continue
+		}
+		if items_to_remove[item_index] {
+			fmt.Printf("Remove: %d already in list\n", item_index)
+			continue
+		}
+		items_to_remove[item_index] = true
+	}
+
+	return items_to_remove
+}
+
+// The unfortunate fact is that these three functions could not be merged, as
+// the w.code type is different from the other two (and is necessary, since
+// there is a need to keep track of if it is an assignment or not).
+// Since Go is a static type language (and the interface{} type cannot be
+// used here as intended), these three are left on their own. The rest has
+// already been abstracted above, thankfully.
+func cmd_remove_declarations_by_index(w *World, defs_to_remove []bool) {
+	new_index := 0
+	for old_index, def_item := range *w.defs {
+		if defs_to_remove[old_index] {
+			continue
+		}
+		(*w.defs)[new_index] = def_item
+		new_index += 1
+	}
+	*w.defs = (*w.defs)[:new_index]
+}
+
+func cmd_remove_packages_by_index(w *World, pkgs_to_remove []bool) {
+	new_index := 0
+	for old_index, pkg_item := range *w.pkgs {
+		if pkgs_to_remove[old_index] {
+			continue
+		}
+		(*w.pkgs)[new_index] = pkg_item
+		new_index += 1
+	}
+	*w.pkgs = (*w.pkgs)[:new_index]
+}
+
+func cmd_remove_code_by_index(w *World, code_to_remove []bool) {
+	new_index := 0
+	for old_index, code_item := range *w.code {
+		if code_to_remove[old_index] {
+			continue
+		}
+		(*w.code)[new_index] = code_item
+		new_index += 1
+	}
+	*w.code = (*w.code)[:new_index]
+}
+
+func cmd_remove_packages_by_name(w *World, cmd_args string) {
+	if len(cmd_args) == 0 {
+		fmt.Println("Fatal error: cmd_args is empty")
+		return
+	}
+
+	pkg_index_list := []string{}
+	for _, pkg_name := range strings.Split(cmd_args, " ") {
+		if pkg_name == "" { continue }
+		pkg_index := -1
+		for i, v := range *w.pkgs {
+			if v == pkg_name {
+				pkg_index = i
+				break
+			}
+		}
+		if pkg_index == -1 {
+			fmt.Printf("Remove: No such package '%s'\n", pkg_name)
+			continue
+		}
+		fmt.Printf("Remove: Removing '%s' at %d\n",pkg_name, pkg_index)
+		pkg_index_list = append(pkg_index_list,strconv.Itoa(pkg_index))
+	}
+	cmd_remove_by_index(w, "p"+strings.Join(pkg_index_list, ","))
+}
+
+
+
+
+
+
+
+
+
+
 
 func main() {
 	fmt.Println("Welcome to the Go REPL!")
 	fmt.Println("Enter '?' for a list of commands.")
 
 	w := new(World)
-	w.pkgs = new(vector.StringVector)
-	w.defs = new(vector.StringVector)
-	w.code = new(vector.Vector)
+	w.pkgs = &[]string{}
+	w.code = &[]interface{}{}
+	w.defs = &[]string{}
+	w.files = token.NewFileSet()
+	w.unstable = false
+	w.write_src_mode = false
 
 	buf := bufio.NewReader(os.Stdin)
-	unstable := false
 	for {
-		if unstable {
+		if w.unstable {
 			fmt.Print("! ")
 		}
 
@@ -159,98 +441,117 @@ func main() {
 			break
 		}
 
-		line := read[0 : len(read)-1]
+		line := strings.Trim(read[0 : len(read)-1], " ")
 		if len(line) == 0 {
+			continue
+		}
+		line = exec_check_alias(line)
+		if exec_special(w, line) {
 			continue
 		}
 
 		w.exec = ""
+		cmd_args := strings.Trim(line[1:]," ")
 
 		switch line[0] {
 		case '?':
-			fmt.Println("Commands:")
-			fmt.Println("\t?\thelp")
-			fmt.Println("\t+ (pkg)\timport package")
-			fmt.Println("\t- (pkg)\tremove package")
-			fmt.Println("\t-[dpc]\tpop last (declaration|package|code)")
-			fmt.Println("\t~\treset")
-			fmt.Println("\t: (...)\tadd persistent code")
-			fmt.Println("\t!\tinspect source")
+			fmt.Println("Symbol Commands:")
+			fmt.Println("\t?                \thelp menu")
+			fmt.Println("\t+ (pkg) (pkg) ...\timport package")
+			fmt.Println("\t- (pkg) (pkg) ...\tremove package")
+			fmt.Println("\t-[dpc][#],[#],...\tpop last/specific (declaration|package|code)")
+			fmt.Println("\t~                \treset")
+			fmt.Println("\t: (...)          \tadd persistent code")
+			fmt.Println("\t!                \tinspect source")
+			
+			fmt.Println("Word Commands:")
+			fmt.Println("\thelp                  \thelp menu")
+			fmt.Println("\timport (pkg) (pkg) ...\timport package")
+			fmt.Println("\treset                 \treset")
+			fmt.Println("\tsource                \tinspect source")
+			fmt.Println("\trun                   \trun source")
+			fmt.Println("\twrite                 \twrite source mode on")
+			fmt.Println("\trepl                  \twrite source mode off")
+			fmt.Println("\tauto                  \tautosetup with some standard packages")
+			
+			fmt.Println("For removal, -[dpc] is equivalent to -[dpc]<last index>")
 		case '+':
-			w.pkgs.Push(strings.Trim(line[1:]," "))
-			unstable = true
-		case '-':
-			if len(line) > 1 && line[1] != ' ' {
-				switch line[1] {
-				case 'd':
-					if w.defs.Len() > 0 {
-						w.defs.Pop()
-					}
-				case 'p':
-					if w.pkgs.Len() > 0 {
-						w.pkgs.Pop()
-					}
-				case 'c':
-					if w.code.Len() > 0 {
-						w.code.Pop()
-					}
-				}
-			} else {
-				if len(line) > 2 && w.pkgs.Len() > 0 {
-					for i, v := range *w.pkgs {
-						if v == line[2:] {
-							w.pkgs.Delete(i)
-							break
-						}
-					}
-				} else {
-					if w.code.Len() > 0 {
-						w.code.Pop()
-					}
+			allpkgs := strings.Split(cmd_args, " ")
+			fmt.Println("Importing: ")
+			for _, pkg_name := range allpkgs {
+				if pkg_name != "" {
+					*w.pkgs = append(*w.pkgs, pkg_name)
+					fmt.Println(" ", len(*w.pkgs), pkg_name)
 				}
 			}
-
-			unstable = compile(w).Len() > 0
+			w.unstable = compile(w).Len() > 0
+		case '-':
+			if len(cmd_args) == 0 {
+				fmt.Println("No item specified for removal.")
+			} else if line[1] != ' ' {
+				cmd_remove_by_index(w, cmd_args)
+			} else {
+				cmd_remove_packages_by_name(w, cmd_args)
+			}
+			w.unstable = compile(w).Len() > 0
 		case '~':
-			w.pkgs.Resize(0, 0)
-			w.defs.Resize(0, 0)
-			w.code.Resize(0, 0)
-			unstable = false
+			*w.pkgs = (*w.pkgs)[:0]
+			*w.defs = (*w.defs)[:0]
+			*w.code = (*w.code)[:0]
+			w.unstable = false
+			w.write_src_mode = false
 		case '!':
-			fmt.Println(w.source())
+			fmt.Println(w.source_print(true))
 		case ':':
 			line = line + ";"
-			tree, err := parser.ParseStmtList("go-repl", strings.Trim(line[1:]," "))
+			tree, err := ParseStmtList(w.files, "go-repl", cmd_args)
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
 			}
 
-			w.code.Push(tree[0])
+			for _, v := range tree {
+				*w.code = append(*w.code, v)
+			}
 
-			unstable = compile(w).Len() > 0
+			w.unstable = compile(w).Len() > 0
 		default:
 			line = line + ";"
 			var tree interface{}
-			tree, err := parser.ParseStmtList("go-repl", line[0:])
+			tree, err := ParseDeclList(w.files, "go-repl", line[0:])
 			if err != nil {
-				tree, err = parser.ParseDeclList("go-repl", line[0:])
+				tree, err = ParseStmtList(w.files, "go-repl", line[0:])
 				if err != nil {
 					fmt.Println("Parse error:", err)
 					continue
+				} else {
+					fmt.Println("CODE: ", line[0:])
 				}
+			} else {
+				fmt.Println("DECL: ", line[0:])
 			}
 
 			changed := false
+			got_err := false
+			bkup_pkgs := *w.pkgs
+			bkup_code := *w.code
+			bkup_defs := *w.defs
+			bkup_files := w.files
+			bkup_exec := w.exec
+
 			switch tree.(type) {
 			case []ast.Stmt:
 				for _, v := range tree.([]ast.Stmt) {
+					if w.write_src_mode {
+						*w.code = append(*w.code, v)
+						continue
+					}
 					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+					printer.Fprint(str, w.files, v)
 
 					switch v.(type) {
 					case *ast.AssignStmt:
-						w.code.Push(v)
+						*w.code = append(*w.code,v)
 						changed = true
 					default:
 						w.exec = str.String()
@@ -259,28 +560,44 @@ func main() {
 			case []ast.Decl:
 				for _, v := range tree.([]ast.Decl) {
 					str := new(bytes.Buffer)
-					printer.Fprint(str, v)
+					printer.Fprint(str, w.files, v)
 
-					w.defs.Push(str.String())
+					*w.defs = append(*w.defs,str.String())
 				}
 
 				changed = true
+			default:
+				fmt.Println("Fatal error: Unknown tree type.")
 			}
+
+			if w.write_src_mode { continue }
 
 			if err := compile(w); err.Len() > 0 {
 				fmt.Println("Compile error:", err)
-
-				if changed {
-					unstable = true
-				}
+				got_err = true
 			} else if out, err := run(); err.Len() > 0 {
 				fmt.Println("Runtime error:\n", err)
-
-				if changed {
-					unstable = true
-				}
+				got_err = true
 			} else {
 				fmt.Print(out)
+			}
+			
+			if got_err {
+				*w.pkgs = bkup_pkgs
+				*w.code = bkup_code
+				*w.defs = bkup_defs
+				w.files = bkup_files
+				w.exec = bkup_exec
+				continue
+			}
+
+			if changed && got_err {
+				w.unstable = true
+				fmt.Println("Fatal error: Code should not run")
+			}
+
+			if changed {
+				w.unstable = compile(w).Len() > 0
 			}
 		}
 	}
