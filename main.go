@@ -210,6 +210,19 @@ func ParseDeclList(fset *token.FileSet, filename string, src interface{}) ([]ast
 	return f.Decls, nil
 }
 
+func exec_check_alias(line string) string {
+	if line == "help" {
+		return "?"
+	} else if strings.HasPrefix(line, "import") {
+		return strings.Replace(line, "import", "+", 1)
+	} else if line == "reset" {
+		return "~"
+	} else if line == "source" {
+		return "!"
+	}
+	return line
+}
+
 func exec_special(w *World, line string) bool {
 	if line == "auto" {  // For autosetup
 		*w.pkgs = append(*w.pkgs, "fmt")
@@ -432,15 +445,7 @@ func main() {
 		if len(line) == 0 {
 			continue
 		}
-		if strings.HasPrefix(line, "import") {
-			line = strings.Replace(line, "import", "+", 1)
-		}
-		if line == "help" {
-			line = "?"
-		}
-		if line == "source" {
-			line = "!"
-		}
+		line = exec_check_alias(line)
 		if exec_special(w, line) {
 			continue
 		}
@@ -462,6 +467,7 @@ func main() {
 			fmt.Println("Word Commands:")
 			fmt.Println("\thelp                  \thelp menu")
 			fmt.Println("\timport (pkg) (pkg) ...\timport package")
+			fmt.Println("\treset                 \treset")
 			fmt.Println("\tsource                \tinspect source")
 			fmt.Println("\trun                   \trun source")
 			fmt.Println("\twrite                 \twrite source mode on")
