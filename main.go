@@ -440,6 +440,7 @@ func main() {
 		}
 
 		w.exec = ""
+		cmd_args := strings.Trim(line[1:]," ")
 
 		switch line[0] {
 		case '?':
@@ -458,7 +459,7 @@ func main() {
 			fmt.Println("\tauto\tautosetup with some standard packages")
 			fmt.Println("For removal, -[dpc] is equivalent to -[dpc]<last index>")
 		case '+':
-			allpkgs := strings.Split(strings.Trim(line[1:]," "), " ")
+			allpkgs := strings.Split(cmd_args, " ")
 			fmt.Println("Importing: ")
 			for _, pkg_name := range allpkgs {
 				if pkg_name != "" {
@@ -486,7 +487,7 @@ func main() {
 			fmt.Println(w.source_print(true))
 		case ':':
 			line = line + ";"
-			tree, err := ParseStmtList(w.files, "go-repl", strings.Trim(line[1:]," "))
+			tree, err := ParseStmtList(w.files, "go-repl", cmd_args)
 			if err != nil {
 				fmt.Println("Parse error:", err)
 				continue
